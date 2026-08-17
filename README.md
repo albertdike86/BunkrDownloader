@@ -67,11 +67,16 @@ git clone https://github.com/Lysagxra/BunkrDownloader.git
 cd BunkrDownloader
 ```
 
-3. Install the required dependencies:
+3. Install `uv`, then create the native environment for the current operating
+   system:
 
 ```bash
-pip install -r requirements.txt
+pip install uv
+make sync
 ```
+
+The Makefile keeps generated environments separate: `.venv-windows` on Windows
+and `.venv-unix` on Linux/macOS. Neither environment is committed.
 
 ## Single Download
 
@@ -139,6 +144,11 @@ python3 downloader.py https://bunkr.si/a/PUK068QE --include FullSizeRender
 To batch download from multiple URLs, you can use the `main.py` script.
 This script reads URLs from a file named `URLs.txt` and downloads each one using the media downloader.
 
+For machine-private settings, create an ignored `local_config.py`. It can define
+`URLS`, `CUSTOM_PATH`, `DISABLE_UI`, `DISABLE_DISK_CHECK`, `MAX_RETRIES`, `IGNORE`,
+`INCLUDE`, and `CHECK_SERVER_STATUS`. These values override the batch defaults without
+putting personal paths or URLs in Git.
+
 ### Usage
 
 1. Create a file named `URLs.txt` in the root of your project, listing each URL on a new line.
@@ -162,8 +172,9 @@ python3 main.py
 
 ## File Download Location
 
-If the `--custom-path <custom_path>` argument is used, the downloaded files will be saved in `<custom_path>/Downloads`.
-Otherwise, the files will be saved in a `Downloads` folder created within the script's directory
+If the `--custom-path <custom_path>` argument is used, that directory is the output
+root. Otherwise, files are saved in a `Downloads` directory in the current working
+directory.
 
 ### Usage
 

@@ -17,8 +17,8 @@ def fetch_page(url: str) -> BeautifulSoup | None:
         response = requests.get(url, headers=HEADERS, timeout=10)
         response.raise_for_status()
 
-    except requests.RequestException:
-        logging.exception("An error occurred while fetching the status page.")
+    except requests.RequestException as req_err:
+        logging.warning("Unable to fetch the optional status page: %s", req_err)
         return None
 
     return BeautifulSoup(response.text, "html.parser")
@@ -57,7 +57,8 @@ def get_bunkr_status() -> dict[str, str]:
 
 def get_offline_servers(bunkr_status: dict[str, str] | None = None) -> dict[str, str]:
     """Return a dictionary of servers that are not operational."""
-    bunkr_status = bunkr_status or get_bunkr_status()
+    if bunkr_status is None:
+        bunkr_status = get_bunkr_status()
     return {
         server_name: server_status
         for server_name, server_status in bunkr_status.items()

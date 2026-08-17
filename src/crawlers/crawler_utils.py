@@ -11,7 +11,7 @@ from src.file_utils import remove_invalid_characters
 from src.general_utils import fetch_page
 from src.url_utils import get_url_based_filename
 
-from .api_utils import decrypt_url, get_api_response
+from .api_utils import get_api_response
 
 if TYPE_CHECKING:
     from bs4 import BeautifulSoup
@@ -85,8 +85,7 @@ async def get_item_download_link(
     soup: BeautifulSoup | None = None,
 ) -> str:
     """Retrieve the download link for a specific item from its HTML content."""
-    api_response = get_api_response(item_url, soup=soup)
-    return decrypt_url(api_response)
+    return get_api_response(item_url, soup=soup)
 
 
 def get_item_filename(item_soup: BeautifulSoup) -> str:
@@ -125,10 +124,11 @@ def format_item_filename(original_filename: str, url_based_filename: str) -> str
 async def get_download_info(item_url: str, item_soup: BeautifulSoup) -> tuple:
     """Gather download information (link and filename) for the item."""
     item_download_link = await get_item_download_link(item_url, soup=item_soup)
+    if not item_download_link:
+        raise RuntimeError(f"Unable to resolve a download URL for {item_url}")
+
     item_filename = get_item_filename(item_soup)
 
-    url_based_filename = (
-        get_url_based_filename(item_download_link) if item_download_link else None
-    )
+    url_based_filename = get_url_based_filename(item_download_link)
     formatted_item_filename = format_item_filename(item_filename, url_based_filename)
     return item_download_link, formatted_item_filename

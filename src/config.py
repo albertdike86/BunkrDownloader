@@ -29,7 +29,8 @@ MIN_DISK_SPACE_GB = 3          # Minimum free disk space (in GB) required.
 # ============================
 STATUS_PAGE = "https://status.bunkr.ru/"  # The URL of the status page for checking
                                           # service availability.
-BUNKR_API = "https://bunkr.cr/api/vs"     # The API for retrieving encryption data.
+BUNKR_API = "https://glb-apisign.cdn.cr/sign"  # API for signing media URLs.
+DOWNLOAD_API = "https://dl.bunkr.cr/api/_001_v2"  # Fallback media resolver.
 FALLBACK_DOMAIN = "bunkr.cr"              # The domain used if the main one is offline.
 
 # ============================

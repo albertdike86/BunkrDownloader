@@ -1,72 +1,86 @@
-"""Module that provides utilities for interacting with the Bunkr API.
-
-It contains functions to:
-- Request encryption-related metadata (e.g., slug resolution, encrypted URLs).
-- Decrypt encrypted URLs using a time-based secret key derived from the API response.
-- Handle network errors and log warnings or exceptions during API requests.
-"""
+"""Resolve current Bunkr media pages to signed download URLs."""
 
 from __future__ import annotations
 
 import logging
-from base64 import b64decode
-from itertools import cycle
-from math import floor
+import re
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse, urlunparse
 
 import requests
 
-from src.config import BUNKR_API, HEADERS, HTTPStatus
-from src.url_utils import get_identifier
+from src.config import BUNKR_API, DOWNLOAD_API, HEADERS
 
 if TYPE_CHECKING:
     from bs4 import BeautifulSoup
 
 
-def get_api_response(
-    item_url: str,
-    soup: BeautifulSoup | None = None,
-) -> dict[str, bool | str | int] | None:
-    """Fetch encryption data for a given slug from the Bunkr API."""
-    slug = get_identifier(item_url, soup=soup)
+JS_VARIABLE = re.compile(r"var\s+(\w+)\s*=\s*(\".*?\"|'.*?'|[^;]+);", re.DOTALL)
+
+
+def _extract_page_vars(soup: BeautifulSoup) -> dict[str, str]:
+    """Extract CDN variables embedded in a media page."""
+    for script in soup.find_all("script"):
+        if script.string and "var jsCDN" in script.string:
+            return {
+                key: value.strip("'\"").replace(r"\/", "/")
+                for key, value in JS_VARIABLE.findall(script.string)
+            }
+    return {}
+
+
+def _extract_file_id(soup: BeautifulSoup) -> str | None:
+    script = soup.find("script", attrs={"data-file-id": True})
+    return script.get("data-file-id") if script else None
+
+
+def get_api_response(item_url: str, soup: BeautifulSoup | None = None) -> str | None:
+    """Resolve a media page and return its signed download URL."""
+    if soup is None:
+        return None
+
+    page_vars = _extract_page_vars(soup)
+    cdn_url = page_vars.get("jsCDN")
 
     try:
         with requests.Session() as session:
             session.headers.update(HEADERS)
-            response = session.post(BUNKR_API, json={"slug": slug})
+            unsigned_url = None
 
-            if response.status_code != HTTPStatus.OK:
-                log_message = f"Failed to fetch encryption data for slug '{slug}'"
-                logging.warning(log_message)
+            if not cdn_url:
+                file_id = _extract_file_id(soup)
+                if file_id:
+                    response = session.post(
+                        DOWNLOAD_API,
+                        json={"id": file_id},
+                        headers={"Accept-Encoding": "gzip, deflate"},
+                        timeout=20,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    base_url, path = data.get("mediafiles"), data.get("path")
+                    if base_url and path:
+                        parsed = urlparse(base_url)
+                        unsigned_url = urlunparse(parsed._replace(path=path))
+
+            base_url = cdn_url or unsigned_url
+            if not base_url:
+                logging.warning("Could not resolve a media URL for %s", item_url)
                 return None
 
-    except requests.RequestException as req_err:
-        log_message = f"Error while requesting encryption data for '{slug}': {req_err}"
-        logging.exception(log_message)
+            response = session.get(
+                BUNKR_API,
+                params={"path": urlparse(base_url).path},
+                timeout=20,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+    except (requests.RequestException, ValueError) as req_err:
+        logging.warning("Error resolving media URL for %s: %s", item_url, req_err)
         return None
 
-    return response.json()
-
-
-def decrypt_url(api_response: dict[str, bool | str | int]) -> str | None:
-    """Decrypt an encrypted URL using a time-based secret key."""
-    try:
-        timestamp = api_response["timestamp"]
-        encrypted_bytes = b64decode(api_response["url"])
-
-    except KeyError as key_err:
-        log_message = f"Missing required encryption data field: {key_err}"
-        logging.exception(log_message)
-        return None
-
-    # Generate the secret key based on the timestamp
-    time_key = floor(timestamp / 3600)
-    secret_key = f"SECRET_KEY_{time_key}"
-
-    # Create a cyclic iterator for the secret key
-    secret_key_bytes = secret_key.encode("utf-8")
-    cycled_key = cycle(secret_key_bytes)
-
-    # Decrypt the data
-    decrypted_bytes = bytearray(byte ^ next(cycled_key) for byte in encrypted_bytes)
-    return decrypted_bytes.decode("utf-8", errors="ignore")
+    token, expires_at = data.get("token"), data.get("ex")
+    if token and expires_at:
+        return f"{base_url}?token={token}&ex={expires_at}"
+    return base_url

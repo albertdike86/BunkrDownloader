@@ -76,9 +76,8 @@ def create_download_directory(
     )
 
     # Determine the base download path.
-    base_path = (
-        Path(custom_path) / DOWNLOAD_FOLDER if custom_path else Path(DOWNLOAD_FOLDER)
-    )
+    # A custom path is the output root itself on every supported operating system.
+    base_path = Path(custom_path) if custom_path else Path(DOWNLOAD_FOLDER)
 
     # Albums containing a single file will be directly downloaded into the 'Downloads'
     # folder, without creating a subfolder for the album ID.
