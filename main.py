@@ -11,6 +11,8 @@ import asyncio
 import importlib
 import sys
 from argparse import Namespace
+from pathlib import Path
+from urllib.parse import urlparse
 
 from downloader import parse_arguments, validate_and_download
 from src.bunkr_utils import get_bunkr_status
@@ -48,6 +50,21 @@ def apply_local_config(args: Namespace, config: object | None) -> None:
             setattr(args, argument, getattr(config, setting))
 
 
+def show_vpn_reminder(config: object | None, urls: list[str]) -> None:
+    """Show the exact downloader process for optional VPN split tunneling."""
+    if not getattr(config, "VPN_SPLIT_TUNNEL_REMINDER", False):
+        return
+
+    executable = Path(sys.executable).resolve()
+    hosts = sorted({urlparse(url).hostname for url in urls if urlparse(url).hostname})
+    print(
+        "VPN / split-tunnel reminder:\n"
+        "  Turn on the VPN before downloading provider-blocked domains.\n"
+        f"  Add this executable to the split-tunnel configuration:\n  {executable}\n"
+        f"  Configured domains: {', '.join(hosts)}",
+    )
+
+
 async def process_urls(
     urls: list[str], args: Namespace, *, check_server_status: bool = True,
 ) -> None:
@@ -77,6 +94,8 @@ async def main() -> None:
     configured_urls = getattr(local_config, "URLS", None)
     source_urls = configured_urls if configured_urls is not None else read_file(URLS_FILE)
     urls = [url.strip() for url in source_urls if url.strip()]
+    show_vpn_reminder(local_config, urls)
+
     check_server_status = getattr(local_config, "CHECK_SERVER_STATUS", True)
     await process_urls(urls, args, check_server_status=check_server_status)
 

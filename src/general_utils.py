@@ -82,7 +82,7 @@ async def fetch_page(url: str, retries: int = 5) -> BeautifulSoup | None:
         # Catch-all for request-related errors
         except requests.RequestException as req_err:
             log_message = f"Request error for {url}: {req_err}"
-            logging.exception(log_message)
+            logging.warning(log_message)
             return None
 
     return None
