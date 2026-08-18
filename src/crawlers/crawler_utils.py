@@ -94,8 +94,14 @@ def get_item_filename(item_soup: BeautifulSoup) -> str:
         "h1",
         {"class": "text-subs font-semibold text-base sm:text-lg truncate"},
     )
-    item_filename = item_filename_container.get_text()
-    return item_filename.encode("latin1").decode("utf-8")
+    item_filename = item_filename_container.get_text().replace("\xa0", " ")
+
+    # Bunkr sometimes serves UTF-8 text that was decoded as Latin-1. Repair that
+    # mojibake when possible, but preserve already-correct Unicode and Latin-1 text.
+    try:
+        return item_filename.encode("latin1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return item_filename
 
 
 def format_item_filename(original_filename: str, url_based_filename: str) -> str:
